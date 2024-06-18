@@ -13,7 +13,6 @@ public static class XrefScannerLowLevel
     private static IEnumerable<IntPtr> JumpTargetsImpl(IEnumerable<Arm64Instruction> myDecoder, bool ignoreRetn)
     {
         var firstFlowControl = true;
-        var baseIl2 = Process.GetCurrentProcess().Modules.OfType<ProcessModule>().First(a => a.ModuleName == "libil2cpp.so").BaseAddress.ToInt64();
 
         foreach (Arm64Instruction instruction in myDecoder)
         {
@@ -21,7 +20,8 @@ public static class XrefScannerLowLevel
                 yield break;
 
             // BL and BLR are calls; B and BR are unconditional branches (B can have a CC qualifier, but the additional check fixes that)
-            if (instruction.Mnemonic is Arm64Mnemonic.BL or Arm64Mnemonic.BLR or Arm64Mnemonic.B or Arm64Mnemonic.BR && instruction.MnemonicConditionCode == Arm64ConditionCode.NONE)
+            // BC is a conditional branch, but adding it fixes a weird bug where it causes Pass 16 to take multiple minutes rather than seconds
+            if (instruction.Mnemonic is Arm64Mnemonic.BL or Arm64Mnemonic.BLR or Arm64Mnemonic.B or Arm64Mnemonic.BR or Arm64Mnemonic.BC && instruction.MnemonicConditionCode == Arm64ConditionCode.NONE)
             {
                 var target = XrefScanUtilFinder.ExtractTargetAddress(instruction);
                 yield return (IntPtr)target;
