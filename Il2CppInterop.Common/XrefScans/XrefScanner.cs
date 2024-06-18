@@ -52,12 +52,7 @@ public static class XrefScanner
     internal static unsafe IEnumerable<Arm64Instruction> DecoderForAddress(IntPtr codeStart, int lengthLimit = 1000)
     {
         if (codeStart == IntPtr.Zero) throw new NullReferenceException(nameof(codeStart));
-
-        using var stream = new UnmanagedMemoryStream((byte*)codeStart, lengthLimit, lengthLimit, FileAccess.Read);
-        using var memStream = new MemoryStream();
-        stream.CopyTo(memStream);
-
-        return Disassembler.Disassemble(memStream.ToArray(), (ulong)codeStart, Disassembler.Options.IgnoreErrors);
+        return Disassembler.Disassemble((byte*)codeStart, lengthLimit, (ulong)codeStart, Disassembler.Options.IgnoreErrors);
     }
 
     internal static IEnumerable<XrefInstance> XrefScanImpl(IEnumerable<Arm64Instruction> decoder, bool skipClassCheck = false)
