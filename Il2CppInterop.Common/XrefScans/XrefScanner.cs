@@ -1,7 +1,8 @@
 using System.Reflection;
-using Iced.Intel;
 using Il2CppInterop.Common.Attributes;
 using Microsoft.Extensions.Logging;
+using Disarm;
+using Iced.Intel;
 
 namespace Il2CppInterop.Common.XrefScans;
 
@@ -48,55 +49,43 @@ public static class XrefScanner
         return XrefScanMethodDb.ListUsers(cachedAttribute);
     }
 
-    internal static unsafe Decoder DecoderForAddress(IntPtr codeStart, int lengthLimit = 1000)
+    internal static unsafe IEnumerable<Arm64Instruction> DecoderForAddress(IntPtr codeStart, int lengthLimit = 1000)
     {
         if (codeStart == IntPtr.Zero) throw new NullReferenceException(nameof(codeStart));
 
-        var stream = new UnmanagedMemoryStream((byte*)codeStart, lengthLimit, lengthLimit, FileAccess.Read);
-        var codeReader = new StreamCodeReader(stream);
-        var decoder = Decoder.Create(IntPtr.Size * 8, codeReader);
-        decoder.IP = (ulong)codeStart;
+        using var stream = new UnmanagedMemoryStream((byte*)codeStart, lengthLimit, lengthLimit, FileAccess.Read);
+        using var memStream = new MemoryStream();
+        stream.CopyTo(memStream);
 
-        return decoder;
+        return Disassembler.Disassemble(memStream.ToArray(), (ulong)codeStart, Disassembler.Options.IgnoreErrors);
     }
 
-    internal static IEnumerable<XrefInstance> XrefScanImpl(Decoder decoder, bool skipClassCheck = false)
+    internal static IEnumerable<XrefInstance> XrefScanImpl(IEnumerable<Arm64Instruction> decoder, bool skipClassCheck = false)
     {
-        while (true)
+        foreach (Arm64Instruction instruction in decoder)
         {
-            decoder.Decode(out var instruction);
-            if (decoder.LastError == DecoderError.NoMoreBytes) yield break;
-
-            if (instruction.FlowControl == FlowControl.Return)
+            if (instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Return))
                 yield break;
 
-            if (instruction.Mnemonic == Mnemonic.Int || instruction.Mnemonic == Mnemonic.Int1)
-                yield break;
-
-            if (instruction.Mnemonic == Mnemonic.Call || instruction.Mnemonic == Mnemonic.Jmp)
+            if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP") || XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_CALL"))
             {
-                var targetAddress = ExtractTargetAddress(instruction);
+                var targetAddress = XrefScanUtilFinder.ExtractTargetAddress(instruction);
                 if (targetAddress != 0)
-                    yield return new XrefInstance(XrefType.Method, (nint)targetAddress, (nint)instruction.IP);
+                    yield return new XrefInstance(XrefType.Method, (nint)targetAddress, (nint)instruction.Address);
                 continue;
             }
 
-            if (instruction.FlowControl == FlowControl.UnconditionalBranch)
-                continue;
-
-            if (IsMoveMnemonic(instruction.Mnemonic))
+            if (instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Move))
             {
+                // seemingly unneeded?
                 XrefInstance? result = null;
                 try
                 {
-                    if (instruction.Op1Kind == OpKind.Memory && instruction.IsIPRelativeMemoryOperand)
+                    if (instruction.Op1Kind == Arm64OperandKind.ImmediatePcRelative)
                     {
-                        var movTarget = (IntPtr)instruction.IPRelativeMemoryAddress;
-                        if (instruction.MemorySize != MemorySize.UInt64)
-                            continue;
-
+                        var movTarget = (IntPtr)((long)instruction.Address + instruction.Op1Imm);
                         if (skipClassCheck || XrefScannerManager.Impl.XrefGlobalClassFilter(movTarget))
-                            result = new XrefInstance(XrefType.Global, movTarget, (IntPtr)instruction.IP);
+                            result = new XrefInstance(XrefType.Global, movTarget, (IntPtr)instruction.Address);
                     }
                 }
                 catch (Exception ex)
@@ -107,30 +96,6 @@ public static class XrefScanner
                 if (result != null)
                     yield return result.Value;
             }
-        }
-    }
-
-    internal static bool IsMoveMnemonic(Mnemonic mnemonic)
-    {
-        return mnemonic is Mnemonic.Mov or >= Mnemonic.Cmova and <= Mnemonic.Cmovs;
-    }
-
-    internal static ulong ExtractTargetAddress(in Instruction instruction)
-    {
-        switch (instruction.Op0Kind)
-        {
-            case OpKind.NearBranch16:
-                return instruction.NearBranch16;
-            case OpKind.NearBranch32:
-                return instruction.NearBranch32;
-            case OpKind.NearBranch64:
-                return instruction.NearBranch64;
-            case OpKind.FarBranch16:
-                return instruction.FarBranch16;
-            case OpKind.FarBranch32:
-                return instruction.FarBranch32;
-            default:
-                return 0;
         }
     }
 }

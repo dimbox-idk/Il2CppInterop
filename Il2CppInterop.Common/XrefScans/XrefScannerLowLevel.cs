@@ -1,4 +1,7 @@
+using System.Runtime.InteropServices;
+using Disarm;
 using Iced.Intel;
+using Microsoft.Extensions.Logging;
 
 namespace Il2CppInterop.Common.XrefScans;
 
@@ -9,41 +12,25 @@ public static class XrefScannerLowLevel
         return JumpTargetsImpl(XrefScanner.DecoderForAddress(codeStart), ignoreRetn);
     }
 
-    private static IEnumerable<IntPtr> JumpTargetsImpl(Decoder myDecoder, bool ignoreRetn)
+    private static IEnumerable<IntPtr> JumpTargetsImpl(IEnumerable<Arm64Instruction> myDecoder, bool ignoreRetn)
     {
-        var firstFlowControl = true;
-
-        while (true)
+        foreach (Arm64Instruction instruction in myDecoder)
         {
-            myDecoder.Decode(out var instruction);
-            if (myDecoder.LastError == DecoderError.NoMoreBytes) yield break;
-
-            // 0xcc - padding after most functions
-            if (instruction.Mnemonic == Mnemonic.Int3)
+            if (instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Return) && !ignoreRetn)
                 yield break;
 
-            if (instruction.FlowControl == FlowControl.Return && !ignoreRetn)
-                yield break;
-
-            if (instruction.FlowControl == FlowControl.UnconditionalBranch ||
-                instruction.FlowControl == FlowControl.Call)
+            if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_CALL") || XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP"))
             {
-                // We hope and pray that the compiler didn't use short jumps for any function calls
-                if (!instruction.IsJmpShort)
-                {
-                    yield return (IntPtr)ExtractTargetAddress(in instruction);
-                    if (firstFlowControl && instruction.FlowControl == FlowControl.UnconditionalBranch) yield break;
-                }
-            }
+                var target = XrefScanUtilFinder.ExtractTargetAddress(instruction);
+                yield return (IntPtr)target;
 
-            if (instruction.FlowControl != FlowControl.Next)
-            {
-                firstFlowControl = false;
+                if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP") || target == 0)
+                    yield break;
             }
         }
     }
 
-    public static IEnumerable<IntPtr> CallAndIndirectTargets(IntPtr pointer)
+    /*public static IEnumerable<IntPtr> CallAndIndirectTargets(IntPtr pointer)
     {
         return CallAndIndirectTargetsImpl(XrefScanner.DecoderForAddress(pointer, 1024 * 1024));
     }
@@ -77,24 +64,5 @@ public static class XrefScannerLowLevel
                         yield return (IntPtr)targetAddress;
                 }
         }
-    }
-
-    private static ulong ExtractTargetAddress(in Instruction instruction)
-    {
-        switch (instruction.Op0Kind)
-        {
-            case OpKind.NearBranch16:
-                return instruction.NearBranch16;
-            case OpKind.NearBranch32:
-                return instruction.NearBranch32;
-            case OpKind.NearBranch64:
-                return instruction.NearBranch64;
-            case OpKind.FarBranch16:
-                return instruction.FarBranch16;
-            case OpKind.FarBranch32:
-                return instruction.FarBranch32;
-            default:
-                throw new ArgumentOutOfRangeException();
-        }
-    }
+    }*/
 }

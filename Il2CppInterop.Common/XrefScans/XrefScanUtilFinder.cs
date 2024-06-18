@@ -1,4 +1,7 @@
-using Iced.Intel;
+using System.Net;
+using System.Runtime.InteropServices;
+using Disarm;
+using Microsoft.Extensions.Logging;
 
 namespace Il2CppInterop.Common.XrefScans;
 
@@ -9,38 +12,33 @@ internal static class XrefScanUtilFinder
         var decoder = XrefScanner.DecoderForAddress(codeStart);
         var lastRcxRead = IntPtr.Zero;
 
-        while (true)
+        foreach (Arm64Instruction instruction in decoder)
         {
-            decoder.Decode(out var instruction);
-            if (decoder.LastError == DecoderError.NoMoreBytes) return IntPtr.Zero;
-
-            if (instruction.FlowControl == FlowControl.Return)
+            if (instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Return))
                 return IntPtr.Zero;
 
-            if (instruction.FlowControl == FlowControl.UnconditionalBranch)
+            if (HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP"))
                 continue;
 
-            if (instruction.Mnemonic == Mnemonic.Int || instruction.Mnemonic == Mnemonic.Int1)
-                return IntPtr.Zero;
-
-            if (instruction.Mnemonic == Mnemonic.Call)
+            if (HasGroup(instruction.Mnemonic, "AArch64_GRP_CALL"))
             {
                 var target = ExtractTargetAddress(instruction);
                 if ((IntPtr)target == callTarget)
                     return lastRcxRead;
             }
 
-            if (instruction.Mnemonic == Mnemonic.Mov)
-                if (instruction.Op0Kind == OpKind.Register && instruction.Op0Register == Register.ECX &&
-                    instruction.Op1Kind == OpKind.Memory && instruction.IsIPRelativeMemoryOperand)
+            if (instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Move))
+            {
+                // seemingly unneeded?
+                if (instruction.Op0Kind == Arm64OperandKind.Register && instruction.Op1Kind == Arm64OperandKind.ImmediatePcRelative)
                 {
-                    var movTarget = (IntPtr)instruction.IPRelativeMemoryAddress;
-                    if (instruction.MemorySize != MemorySize.UInt32 && instruction.MemorySize != MemorySize.Int32)
-                        continue;
-
-                    lastRcxRead = movTarget;
+                    var target = (long)instruction.Address + instruction.Op1Imm;
+                    lastRcxRead = (IntPtr)target;
                 }
+            }
         }
+
+        return IntPtr.Zero;
     }
 
     public static IntPtr FindByteWriteTargetRightAfterCallTo(IntPtr codeStart, IntPtr callTarget)
@@ -48,50 +46,140 @@ internal static class XrefScanUtilFinder
         var decoder = XrefScanner.DecoderForAddress(codeStart);
         var seenCall = false;
 
-        while (true)
+        foreach (Arm64Instruction instruction in decoder)
         {
-            decoder.Decode(out var instruction);
-            if (decoder.LastError == DecoderError.NoMoreBytes) return IntPtr.Zero;
-
-            if (instruction.FlowControl == FlowControl.Return)
+            if (instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Return))
                 return IntPtr.Zero;
 
-            if (instruction.FlowControl == FlowControl.UnconditionalBranch)
+            if (HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP"))
                 continue;
 
-            if (instruction.Mnemonic == Mnemonic.Int || instruction.Mnemonic == Mnemonic.Int1)
-                return IntPtr.Zero;
-
-            if (instruction.Mnemonic == Mnemonic.Call)
+            if (HasGroup(instruction.Mnemonic, "AArch64_GRP_CALL"))
             {
                 var target = ExtractTargetAddress(instruction);
                 if ((IntPtr)target == callTarget)
+                {
                     seenCall = true;
+                    continue;
+                }
             }
 
-            if (instruction.Mnemonic == Mnemonic.Mov && seenCall)
-                if (instruction.Op0Kind == OpKind.Memory && (instruction.MemorySize == MemorySize.Int8 ||
-                                                             instruction.MemorySize == MemorySize.UInt8))
-                    return (IntPtr)instruction.IPRelativeMemoryAddress;
+            if (instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Move) && seenCall)
+            {
+                // seemingly unneeded?
+                if (instruction.Op0Kind == Arm64OperandKind.Register && instruction.Op1Kind == Arm64OperandKind.ImmediatePcRelative)
+                {
+                    var target = (long)instruction.Address + instruction.Op1Imm;
+                    return (IntPtr)target;
+                }
+            }
         }
+
+        return IntPtr.Zero;
     }
 
-    private static ulong ExtractTargetAddress(in Instruction instruction)
+    public static ulong ExtractTargetAddress(in Arm64Instruction instruction)
     {
-        switch (instruction.Op0Kind)
+        if (instruction.Op0Kind == Arm64OperandKind.None)
         {
-            case OpKind.NearBranch16:
-                return instruction.NearBranch16;
-            case OpKind.NearBranch32:
-                return instruction.NearBranch32;
-            case OpKind.NearBranch64:
-                return instruction.NearBranch64;
-            case OpKind.FarBranch16:
-                return instruction.FarBranch16;
-            case OpKind.FarBranch32:
-                return instruction.FarBranch32;
-            default:
-                return 0;
+            Logger.Instance.LogInformation("Not enough operands to extract target address");
+            return 0;
+        }
+
+        int lastOperand = -1;
+        if (instruction.Op0Kind != Arm64OperandKind.None)
+            lastOperand = 0;
+        if (instruction.Op1Kind != Arm64OperandKind.None)
+            lastOperand = 1;
+        if (instruction.Op2Kind != Arm64OperandKind.None)
+            lastOperand = 2;
+        if (instruction.Op3Kind != Arm64OperandKind.None)
+            lastOperand = 3;
+
+        return lastOperand switch
+        {
+            0 => (ulong)((long)instruction.Address + instruction.Op0Imm),
+            1 => (ulong)((long)instruction.Address + instruction.Op1Imm),
+            2 => (ulong)((long)instruction.Address + instruction.Op2Imm),
+            3 => (ulong)((long)instruction.Address + instruction.Op3Imm),
+            _ => 0,
+        };
+    }
+
+    // group markings stolen from capstone
+    public static bool HasGroup(Arm64Mnemonic mnemonic, string group)
+    {
+        switch (mnemonic)
+        {
+            case Arm64Mnemonic.B:
+                {
+                    if (group == "AArch64_GRP_JUMP")
+                        return true;
+                    if (group == "AArch64_GRP_BRANCH_RELATIVE")
+                        return true;
+                    return false;
+                }
+            case Arm64Mnemonic.BC:
+                {
+                    if (group == "AArch64_GRP_JUMP")
+                        return true;
+                    if (group == "AArch64_GRP_BRANCH_RELATIVE")
+                        return true;
+                    return false;
+                }
+            case Arm64Mnemonic.BL:
+                {
+                    if (group == "AArch64_GRP_CALL")
+                        return true;
+                    if (group == "AArch64_GRP_BRANCH_RELATIVE")
+                        return true;
+                    return false;
+                }
+            case Arm64Mnemonic.BLR:
+                {
+                    if (group == "AArch64_GRP_CALL")
+                        return true;
+                    return false;
+                }
+            case Arm64Mnemonic.BR:
+                {
+                    if (group == "AArch64_GRP_JUMP")
+                        return true;
+                    return false;
+                }
+            case Arm64Mnemonic.CBNZ:
+                {
+                    if (group == "AArch64_GRP_JUMP")
+                        return true;
+                    if (group == "AArch64_GRP_BRANCH_RELATIVE")
+                        return true;
+                    return false;
+                }
+            case Arm64Mnemonic.CBZ:
+                {
+                    if (group == "AArch64_GRP_JUMP")
+                        return true;
+                    if (group == "AArch64_GRP_BRANCH_RELATIVE")
+                        return true;
+                    return false;
+                }
+            case Arm64Mnemonic.TBNZ:
+                {
+                    if (group == "AArch64_GRP_JUMP")
+                        return true;
+                    if (group == "AArch64_GRP_BRANCH_RELATIVE")
+                        return true;
+                    return false;
+                }
+            case Arm64Mnemonic.TBZ:
+                {
+                    if (group == "AArch64_GRP_JUMP")
+                        return true;
+                    if (group == "AArch64_GRP_BRANCH_RELATIVE")
+                        return true;
+                    return false;
+                }
+            default: return false;
         }
     }
 }
