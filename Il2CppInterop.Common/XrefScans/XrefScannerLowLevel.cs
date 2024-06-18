@@ -1,7 +1,5 @@
-using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Disarm;
-using Iced.Intel;
-using Microsoft.Extensions.Logging;
 
 namespace Il2CppInterop.Common.XrefScans;
 
@@ -14,22 +12,46 @@ public static class XrefScannerLowLevel
 
     private static IEnumerable<IntPtr> JumpTargetsImpl(IEnumerable<Arm64Instruction> myDecoder, bool ignoreRetn)
     {
+        var firstFlowControl = true;
+        var baseIl2 = Process.GetCurrentProcess().Modules.OfType<ProcessModule>().First(a => a.ModuleName == "libil2cpp.so").BaseAddress.ToInt64();
+
         foreach (Arm64Instruction instruction in myDecoder)
         {
-            if (instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Return) && !ignoreRetn)
+            if ((instruction.MnemonicCategory.HasFlag(Arm64MnemonicCategory.Return) || instruction.Mnemonic == Arm64Mnemonic.RET) && !ignoreRetn)
                 yield break;
 
-            if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_CALL") || XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP"))
+            // BL and BLR are calls; B and BR are unconditional branches (B can have a CC qualifier, but the additional check fixes that)
+            if (instruction.Mnemonic is Arm64Mnemonic.BL or Arm64Mnemonic.BLR or Arm64Mnemonic.B or Arm64Mnemonic.BR && instruction.MnemonicConditionCode == Arm64ConditionCode.NONE)
             {
                 var target = XrefScanUtilFinder.ExtractTargetAddress(instruction);
                 yield return (IntPtr)target;
 
-                if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP") || target == 0)
-                    yield break;
+                if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP") || target == 0) yield break;
+                //if (firstFlowControl && instruction.Mnemonic is Arm64Mnemonic.B or Arm64Mnemonic.BR) // if unconditional
+                //    yield break;
             }
+
+            if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP") || XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_CALL"))
+                firstFlowControl = false;
         }
     }
 
+    public static int InstructionsToBL(IntPtr codeStart, int maxInstructions = 20)
+    {
+        var decoder = XrefScanner.DecoderForAddress(codeStart, maxInstructions * 4);
+        var instructionCount = 0;
+
+        foreach (Arm64Instruction instruction in decoder)
+        {
+            instructionCount++;
+            if (instruction.Mnemonic == Arm64Mnemonic.BL)
+                return instructionCount;
+        }
+
+        return instructionCount;
+    }
+
+    // in the wise words of sircoolness, when porting this, i don't know what it does
     /*public static IEnumerable<IntPtr> CallAndIndirectTargets(IntPtr pointer)
     {
         return CallAndIndirectTargetsImpl(XrefScanner.DecoderForAddress(pointer, 1024 * 1024));

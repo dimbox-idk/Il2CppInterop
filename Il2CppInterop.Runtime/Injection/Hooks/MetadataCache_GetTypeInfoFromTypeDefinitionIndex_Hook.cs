@@ -33,6 +33,11 @@ namespace Il2CppInterop.Runtime.Injection.Hooks
             // il2cpp_image_get_class is added in 2018.3.0f1
             if (Il2CppInteropRuntime.Instance.UnityVersion < new Version(2018, 3, 0) || forceICallMethod)
             {
+                // TODO: likely another bad idea
+                // for some reason this doesn't exist in my test app so it just skips it if it cant be found with the non-icall method
+                // the unstripped version also doesnt have it though, i assume the other method works or something?
+                return IntPtr.Zero;
+
                 // (Kasuromi): RuntimeHelpers.InitializeArray calls an il2cpp icall, proxy function does some magic before it invokes it
                 // https://github.com/Unity-Technologies/mono/blob/unity-2018.2/mcs/class/corlib/System.Runtime.CompilerServices/RuntimeHelpers.cs#L53-L54
                 IntPtr runtimeHelpersInitializeArray = InjectorHelpers.GetIl2CppMethodPointer(

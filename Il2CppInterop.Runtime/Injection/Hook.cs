@@ -20,7 +20,8 @@ namespace Il2CppInterop.Runtime.Injection
 
         public virtual void TargetMethodNotFound()
         {
-            throw new Exception($"Required target method {TargetMethodName} not found");
+            //throw new Exception($"Required target method {TargetMethodName} not found");
+            Logger.Instance.LogWarning($"Required target method {TargetMethodName} not found");
         }
 
         public void ApplyHook()

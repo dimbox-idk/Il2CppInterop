@@ -36,7 +36,14 @@ namespace Il2CppInterop.Runtime.Injection.Hooks
             var classFromNameAPI = InjectorHelpers.GetIl2CppExport(nameof(IL2CPP.il2cpp_class_from_name));
             Logger.Instance.LogTrace("il2cpp_class_from_name: 0x{ClassFromNameApiAddress}", classFromNameAPI.ToInt64().ToString("X2"));
 
-            return XrefScannerLowLevel.JumpTargets(classFromNameAPI).Single();
+            // TODO: this is probably a very bad idea
+            // my testing app's il2cpp_class_from_name causes a crash when hooking is done because the parameters don't match but the unstripped version matches parameters and works fine
+            // this is very likely not going to be the case for every app and will probably cause issues at some point.
+            var toBl = XrefScannerLowLevel.InstructionsToBL(classFromNameAPI);
+            if (toBl > 1)
+                return IntPtr.Zero;
+
+            return XrefScannerLowLevel.JumpTargets(classFromNameAPI).First();
         }
     }
 }
