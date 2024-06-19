@@ -26,7 +26,8 @@ public static class XrefScannerLowLevel
                 var target = XrefScanUtilFinder.ExtractTargetAddress(instruction);
                 yield return (IntPtr)target;
 
-                if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP") || target == 0) yield break;
+                if (target == 0) yield break;
+
                 //if (firstFlowControl && instruction.Mnemonic is Arm64Mnemonic.B or Arm64Mnemonic.BR) // if unconditional
                 //    yield break;
             }
