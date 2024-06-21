@@ -15,6 +15,8 @@ internal class GarbageCollector_RunFinalizer_Patch : Hook<GarbageCollector_RunFi
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void MethodDelegate(IntPtr obj, IntPtr data);
 
+    private bool _failed;
+
     private void Hook(IntPtr obj, IntPtr data)
     {
         unsafe
@@ -55,6 +57,9 @@ internal class GarbageCollector_RunFinalizer_Patch : Hook<GarbageCollector_RunFi
 
     public override IntPtr FindTargetMethod()
     {
+        if (_failed)
+            return IntPtr.Zero;
+
         return s_signatures
             .Select(s => MemoryUtils.FindSignatureInModule(InjectorHelpers.Il2CppModule, s))
             .FirstOrDefault(p => p != 0);
@@ -62,6 +67,7 @@ internal class GarbageCollector_RunFinalizer_Patch : Hook<GarbageCollector_RunFi
 
     public override void TargetMethodNotFound()
     {
+        _failed = true;
         Il2CppObjectPool.DisableCaching = true;
         Logger.Instance.LogWarning("{MethodName} not found, disabling Il2CppObjectPool", TargetMethodName);
     }
