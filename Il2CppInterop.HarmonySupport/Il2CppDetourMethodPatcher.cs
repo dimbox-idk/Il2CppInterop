@@ -348,8 +348,12 @@ internal unsafe class Il2CppDetourMethodPatcher : MethodPatcher
         il.Emit(OpCodes.Add);
     }
 
-    private static void ReportException(Exception ex) =>
-        Logger.Instance.LogError(ex, "During invoking native->managed trampoline");
+    private static void ReportException(Exception ex)
+    {
+        // TODO: not sure if this actually logs now
+        Logger.Instance.LogError("During invoking native->managed trampoline");
+        Logger.Instance.LogError(message: ex.ToString());
+    }
 
     private static void EmitConvertManagedTypeToIL2CPP(ILGenerator il, Type returnType)
     {
