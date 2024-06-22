@@ -5,9 +5,9 @@ namespace Il2CppInterop.Common.XrefScans;
 
 public static class XrefScannerLowLevel
 {
-    public static IEnumerable<IntPtr> JumpTargets(IntPtr codeStart, bool ignoreRetn = false)
+    public static IEnumerable<IntPtr> JumpTargets(IntPtr codeStart, bool ignoreRetn = false, int instructions = 250)
     {
-        return JumpTargetsImpl(XrefScanner.DecoderForAddress(codeStart), ignoreRetn);
+        return JumpTargetsImpl(XrefScanner.DecoderForAddress(codeStart, instructions * 4), ignoreRetn);
     }
 
     private static IEnumerable<IntPtr> JumpTargetsImpl(IEnumerable<Arm64Instruction> myDecoder, bool ignoreRetn)
@@ -35,21 +35,6 @@ public static class XrefScannerLowLevel
             if (XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_JUMP") || XrefScanUtilFinder.HasGroup(instruction.Mnemonic, "AArch64_GRP_CALL"))
                 firstFlowControl = false;
         }
-    }
-
-    public static int InstructionsToBL(IntPtr codeStart, int maxInstructions = 20)
-    {
-        var decoder = XrefScanner.DecoderForAddress(codeStart, maxInstructions * 4);
-        var instructionCount = 0;
-
-        foreach (Arm64Instruction instruction in decoder)
-        {
-            instructionCount++;
-            if (instruction.Mnemonic == Arm64Mnemonic.BL)
-                return instructionCount;
-        }
-
-        return instructionCount;
     }
 
     // in the wise words of sircoolness, when porting this, i don't know what it does
