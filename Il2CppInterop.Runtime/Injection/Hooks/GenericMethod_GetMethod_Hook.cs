@@ -53,6 +53,36 @@ namespace Il2CppInterop.Runtime.Injection.Hooks
 
         public override IntPtr FindTargetMethod()
         {
+            // this is done like this cause my test app doesn't have a shim, but falls within the shim version range
+            var target = IntPtr.Zero;
+            try
+            {
+                target = TryFindTargetMethod();
+            }
+            catch
+            {
+                try
+                {
+                    if (UnityVersionHandler.HasShimForGetMethod)
+                        target = TryFindTargetMethod(false);
+                }
+                catch
+                {
+                    throw;
+                }
+
+                if (target == IntPtr.Zero)
+                    throw;
+            }
+
+            return target;
+        }
+
+        private IntPtr TryFindTargetMethod(bool tryShim = true)
+        {
+            if (!tryShim)
+                Logger.Instance.LogTrace("Re-attempting search, ignoring shim.");
+
             // On Unity 2021.2+, the 3 parameter shim can be inlined and optimized by the compiler
             // which moves the method we're looking for
             var genericMethodGetMethod = s_Signatures
@@ -78,7 +108,7 @@ namespace Il2CppInterop.Runtime.Injection.Hooks
                 {
                     // U2021.2.0+, there's additional shim that takes 3 parameters
                     // On U2020.3.41+ there is also a shim, which gets inlined with one added in U2021.2.0+ in release builds
-                    if (UnityVersionHandler.HasShimForGetMethod)
+                    if (UnityVersionHandler.HasShimForGetMethod && tryShim)
                     {
                         var shim = getVirtualMethodXrefs.Last();
 
