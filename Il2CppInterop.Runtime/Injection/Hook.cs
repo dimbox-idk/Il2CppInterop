@@ -26,22 +26,30 @@ namespace Il2CppInterop.Runtime.Injection
 
         public void ApplyHook()
         {
-            if (_isApplied) return;
+            try
+            {
+                if (_isApplied) return;
 
-            var methodPtr = FindTargetMethod();
+                var methodPtr = FindTargetMethod();
 
-            if (methodPtr == IntPtr.Zero)
+                if (methodPtr == IntPtr.Zero)
+                {
+                    TargetMethodNotFound();
+                    return;
+                }
+
+                Logger.Instance.LogTrace("{MethodName} found: 0x{MethodPtr}", TargetMethodName, methodPtr.ToInt64().ToString("X2"));
+
+                _detour = GetDetour();
+                Detour.Apply(methodPtr, _detour, out _original);
+                _method = Marshal.GetDelegateForFunctionPointer<T>(methodPtr);
+                _isApplied = true;
+            }
+            catch (Exception ex)
             {
                 TargetMethodNotFound();
-                return;
+                Logger.Instance.LogError(ex.ToString());
             }
-
-            Logger.Instance.LogTrace("{MethodName} found: 0x{MethodPtr}", TargetMethodName, methodPtr.ToInt64().ToString("X2"));
-
-            _detour = GetDetour();
-            Detour.Apply(methodPtr, _detour, out _original);
-            _method = Marshal.GetDelegateForFunctionPointer<T>(methodPtr);
-            _isApplied = true;
         }
     }
 }
