@@ -145,22 +145,6 @@ namespace Il2CppInterop.Runtime.Injection
         internal delegate void d_ClassInit(Il2CppClass* klass);
         internal static d_ClassInit ClassInit;
 
-        private static readonly MemoryUtils.SignatureDefinition[] s_ClassInitSignatures =
-        {
-            new MemoryUtils.SignatureDefinition
-            {
-                pattern = "\xE8\x00\x00\x00\x00\x0F\xB7\x47\x28\x83",
-                mask = "x????xxxxx",
-                xref = true
-            },
-            new MemoryUtils.SignatureDefinition
-            {
-                pattern = "\xE8\x00\x00\x00\x00\x0F\xB7\x47\x48\x48",
-                mask = "x????xxxxx",
-                xref = true
-            }
-        };
-
         private static d_ClassInit FindClassInit()
         {
             static nint GetClassInitSubstitute()
@@ -184,15 +168,7 @@ namespace Il2CppInterop.Runtime.Injection
                 Logger.Instance.LogTrace("GameAssembly.dll: 0x{Il2CppModuleAddress}", Il2CppModule.BaseAddress.ToInt64().ToString("X2"));
                 throw new NotSupportedException("Failed to use signature for Class::Init and a substitute cannot be found, please create an issue and report your unity version & game");
             }
-            nint pClassInit = s_ClassInitSignatures
-                .Select(s => MemoryUtils.FindSignatureInModule(Il2CppModule, s))
-                .FirstOrDefault(p => p != 0);
-
-            if (pClassInit == 0)
-            {
-                Logger.Instance.LogWarning("Class::Init signatures have been exhausted, using a substitute!");
-                pClassInit = GetClassInitSubstitute();
-            }
+            nint pClassInit = GetClassInitSubstitute();
 
             Logger.Instance.LogTrace("Class::Init: 0x{PClassInitAddress}", pClassInit.ToString("X2"));
 
