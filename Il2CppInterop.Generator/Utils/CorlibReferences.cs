@@ -2,8 +2,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Signatures;
-using Il2CppInterop.Common;
-using Microsoft.Extensions.Logging;
 
 namespace Il2CppInterop.Generator.Utils;
 
