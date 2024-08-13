@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using AsmResolver.DotNet;
 using AsmResolver.DotNet.Signatures;
+using Il2CppInterop.Common;
+using Microsoft.Extensions.Logging;
 
 namespace Il2CppInterop.Generator.Utils;
 
@@ -24,12 +26,14 @@ internal static class CorlibReferences
         target.Culture = source.Culture;
         target.DisableJitCompileOptimizer = source.DisableJitCompileOptimizer;
         target.EnableJitCompileTracking = source.EnableJitCompileTracking;
-        target.HashValue = [.. source.HashValue];
+        if (source.HashValue != null)
+            target.HashValue = [.. source.HashValue];
         target.HasPublicKey = source.HasPublicKey;
         target.IsRetargetable = source.IsRetargetable;
         target.IsWindowsRuntime = source.IsWindowsRuntime;
         target.Name = source.Name;
-        target.PublicKeyOrToken = [.. source.PublicKeyOrToken];
+        if (source.PublicKeyOrToken != null)
+            target.PublicKeyOrToken = [.. source.PublicKeyOrToken];
         target.Version = source.Version;
     }
 
