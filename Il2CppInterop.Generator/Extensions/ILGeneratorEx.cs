@@ -325,7 +325,7 @@ public static class ILGeneratorEx
         {
             body.Add(OpCodes.Ldloc, pointerVariable);
             if (extraDerefForNonValueTypes) body.Add(OpCodes.Ldind_I);
-            var actualReturnType = imports.Module.DefaultImporter.ImportTypeSignature(imports.Il2CppArrayBase.MakeGenericInstanceType(genericParameterSignature));//Maybe need to duplicate the generic parameter signature
+            var actualReturnType = imports.Module.DefaultImporter.ImportTypeSignature(imports.Il2CppArrayBase.MakeGenericInstanceType(new GenericParameterSignature(GenericParameterType.Type, 0)));
             var methodRef = ReferenceCreator.CreateStaticMethodReference("WrapNativeGenericArrayPointer",
                     actualReturnType,
                     convertedReturnType.ToTypeDefOrRef(),
