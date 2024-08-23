@@ -24,14 +24,12 @@ internal static class CorlibReferences
         target.Culture = source.Culture;
         target.DisableJitCompileOptimizer = source.DisableJitCompileOptimizer;
         target.EnableJitCompileTracking = source.EnableJitCompileTracking;
-        if (source.HashValue != null)
-            target.HashValue = [.. source.HashValue];
+        target.HashValue = source.HashValue?.ToArray();
         target.HasPublicKey = source.HasPublicKey;
         target.IsRetargetable = source.IsRetargetable;
         target.IsWindowsRuntime = source.IsWindowsRuntime;
         target.Name = source.Name;
-        if (source.PublicKeyOrToken != null)
-            target.PublicKeyOrToken = [.. source.PublicKeyOrToken];
+        target.PublicKeyOrToken = source.PublicKeyOrToken?.ToArray();
         target.Version = source.Version;
     }
 

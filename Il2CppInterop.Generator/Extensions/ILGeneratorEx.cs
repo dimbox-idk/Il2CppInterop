@@ -323,6 +323,9 @@ public static class ILGeneratorEx
         }
         else if (originalReturnType is ArrayBaseTypeSignature && originalReturnType.GetElementType() is GenericParameterSignature genericParameterSignature)
         {
+            // Note:
+            // The method reference parent is constructed relative to the calling method.
+            // The return type and parameter types are constructed relative to the called method.
             body.Add(OpCodes.Ldloc, pointerVariable);
             if (extraDerefForNonValueTypes) body.Add(OpCodes.Ldind_I);
             var actualReturnType = imports.Module.DefaultImporter.ImportTypeSignature(imports.Il2CppArrayBase.MakeGenericInstanceType(new GenericParameterSignature(GenericParameterType.Type, 0)));
