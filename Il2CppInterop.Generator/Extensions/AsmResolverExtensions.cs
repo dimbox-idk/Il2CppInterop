@@ -39,11 +39,15 @@ internal static class AsmResolverExtensions
                 : method.Parameters[argumentIndex - 1];
     }
 
+    public static bool IsReferenceType(this TypeDefinition type) => !type.IsValueType;
+
     public static bool HasGenericParameters(this TypeDefinition type) => type.GenericParameters.Count > 0;
 
     public static bool HasGenericParameters(this MethodDefinition method) => method.GenericParameters.Count > 0;
 
     public static bool HasConstant(this FieldDefinition field) => field.Constant is not null;
+
+    public static bool IsInstance(this FieldDefinition field) => !field.IsStatic;
 
     public static bool HasMethods(this TypeDefinition type) => type.Methods.Count > 0;
 
@@ -52,6 +56,10 @@ internal static class AsmResolverExtensions
     public static bool IsNested(this ITypeDefOrRef type) => type.DeclaringType is not null;
 
     public static bool IsNested(this TypeSignature type) => type.DeclaringType is not null;
+
+    public static bool IsPointerLike(this TypeSignature type) => type is PointerTypeSignature or ByReferenceTypeSignature;
+
+    public static bool IsValueTypeLike(this TypeSignature type) => type.IsValueType || type.IsPointerLike();
 
     public static bool IsSystemEnum(this GenericParameterConstraint constraint) => constraint.Constraint?.FullName is "System.Enum";
 
@@ -63,12 +71,11 @@ internal static class AsmResolverExtensions
 
     public static Parameter AddParameter(this MethodDefinition method, TypeSignature parameterSignature, string parameterName, ParameterAttributes parameterAttributes = default)
     {
-        var parameterDefinition = new ParameterDefinition((ushort)(method.Signature!.ParameterTypes.Count + 1), parameterName, parameterAttributes);
-        method.Signature.ParameterTypes.Add(parameterSignature);
-        method.ParameterDefinitions.Add(parameterDefinition);
-
-        method.Parameters.PullUpdatesFromMethodSignature();
-        return method.Parameters.Single(parameter => parameter.Name == parameterName && parameter.ParameterType == parameterSignature);
+        var parameter = method.AddParameter(parameterSignature);
+        var parameterDefinition = parameter.GetOrCreateDefinition();
+        parameterDefinition.Name = parameterName;
+        parameterDefinition.Attributes = parameterAttributes;
+        return parameter;
     }
 
     public static Parameter AddParameter(this MethodDefinition method, TypeSignature parameterSignature)
