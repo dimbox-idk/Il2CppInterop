@@ -120,6 +120,11 @@ public class RewriteGlobalContext : IDisposable
         return null;
     }
 
+    public TypeRewriteContext GetContextForNewType(TypeDefinition type)
+    {
+        return GetAssemblyByName(type.Module!.Assembly!.Name!).GetContextForNewType(type);
+    }
+
     public MethodDefinition? CreateParamsMethod(MethodDefinition originalMethod, MethodDefinition newMethod,
         RuntimeAssemblyReferences imports, Func<TypeSignature, TypeSignature?> resolve)
     {
@@ -136,6 +141,9 @@ public class RewriteGlobalContext : IDisposable
             foreach (var genericParameter in originalMethod.GenericParameters)
             {
                 var newGenericParameter = new GenericParameter(genericParameter.Name, genericParameter.Attributes);
+
+                if (newGenericParameter.Name.IsInvalidInSource())
+                    newGenericParameter.Name = newGenericParameter.Name.FilterInvalidInSourceChars();
 
                 foreach (var constraint in genericParameter.Constraints)
                 {
