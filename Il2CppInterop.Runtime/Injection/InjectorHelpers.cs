@@ -29,7 +29,7 @@ namespace Il2CppInterop.Runtime.Injection
         internal static INativeImageStruct InjectedImage;
         internal static ProcessModule Il2CppModule = Process.GetCurrentProcess()
             .Modules.OfType<ProcessModule>()
-            .Single((x) => x.ModuleName is "GameAssembly.dll" or "GameAssembly.so" or "UserAssembly.dll" or "libil2cpp.so");
+            .Last((x) => x.ModuleName is "GameAssembly.dll" or "GameAssembly.so" or "UserAssembly.dll" or "libil2cpp.so");
 
         internal static IntPtr Il2CppHandle = NativeLibrary.Load("libil2cpp.so", typeof(InjectorHelpers).Assembly, null);
 
