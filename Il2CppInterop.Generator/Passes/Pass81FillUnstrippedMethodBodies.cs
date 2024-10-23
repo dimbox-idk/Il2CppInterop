@@ -20,7 +20,17 @@ public static class Pass81FillUnstrippedMethodBodies
 
         foreach (var (unityMethod, newMethod, processedType, imports) in StuffToProcess)
         {
-            var success = UnstripTranslator.TranslateMethod(unityMethod, newMethod, processedType, imports);
+            var success = false;
+
+            try
+            {
+                UnstripTranslator.TranslateMethod(unityMethod, newMethod, processedType, imports);
+            }
+            catch (Exception ex)
+            {
+                Logger.Instance.LogWarning($"Failed to translate method\n{ex}");
+            }
+
             if (success == false)
             {
                 methodsFailed++;
