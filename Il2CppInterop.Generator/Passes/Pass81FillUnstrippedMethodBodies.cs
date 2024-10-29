@@ -24,7 +24,7 @@ public static class Pass81FillUnstrippedMethodBodies
 
             try
             {
-                UnstripTranslator.TranslateMethod(unityMethod, newMethod, processedType, imports);
+                success = UnstripTranslator.TranslateMethod(unityMethod, newMethod, processedType, imports);
             }
             catch (Exception ex)
             {
